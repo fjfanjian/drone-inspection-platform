@@ -1,0 +1,192 @@
+# 无人机智慧巡检平台 — AGENTS.md
+
+三仓库工作区。每个子项目有独立 Git 仓库和详细 `CLAUDE.md`，**先读对应 CLAUDE.md 再动手改代码**。
+
+工作时，**必须**先探索可用的SKILL，使用适合的SKILL解决问题。完成任务后，使用self-improvement SKILL总结经验并自我提升。
+
+完整架构文档:`ARCHITECTURE.md`
+
+完成工作后**必须**进行回归测试，确保更改没有影响原业务功能。
+
+### 代码拆分与可维护性约束
+
+- 禁止新增“全能型”巨型文件。新增或大改文件前，先判断职责边界：页面负责编排，组件负责展示与交互，composable 负责状态与副作用，service/api 负责业务调用与协议细节。
+- Vue 页面组件不得承载大量业务逻辑。若页面内出现复杂数据处理、WebSocket/MQTT、地图渲染、权限判断、表单流程、轮询、任务状态机等逻辑，应提取到 `composables/`、`services/`、`store/` 或领域组件中。
+- 不允许在 `src/views/` 中直接写散落的 axios/fetch 请求；接口调用必须进入 `src/api/` 或已有业务 API 封装层。
+- 不允许把 Pinia store 写成业务垃圾桶。store 只管理领域状态、派生状态和跨页面动作；UI 展示状态、弹窗状态、临时表单状态优先留在组件或 composable。
+- 单个函数应只做一件事。若函数同时包含数据获取、转换、权限判断、UI 通知、异常处理和状态写入，应拆分为命名清晰的小函数。
+- 出现第三处相似逻辑时必须抽取公共实现；地图渲染、设备状态映射、任务状态映射、时间/坐标/告警格式化等不得复制粘贴。
+- 新增组件时优先设计清晰 props/emits，不直接依赖全局 store 或路由，除非它本身就是页面级容器组件。
+- 文件明显变大时必须主动拆分。软阈值：Vue SFC 超过 400 行、普通 JS/TS 文件超过 300 行、函数超过 80 行、嵌套超过 3 层时，应优先拆分；确需保留必须在代码或回复中说明原因。
+- 不为“复用”过早抽象，但一旦抽象能消除真实重复、隔离副作用、降低页面复杂度，就必须抽取。
+- 每次修改后检查是否引入新的架构倒挂：`views` 不反向承担 service 职责，`components` 不直接拼接 API 协议，`utils` 不塞业务流程。
+- 修改已有臃肿文件时，不得继续往文件底部堆功能；应优先在当前改动范围内顺手拆出稳定边界。
+- 提交前自查：新增代码是否有明确所属层级、是否能被单独测试、是否减少而不是增加页面复杂度。
+
+## 仓库拓扑
+
+```
+DISys/                        # 后端 — Spring Boot 2.7 / Java 11 / MyBatis-Plus
+DroneCloudSystem-web/         # 前端 — Vue 3 / Vite 5 / Pinia / Ant Design Vue 4
+DroneCloudSystem_detection-server/  # AI 检测 — Python FastAPI / YOLOv11 / OpenCV
+DroneCloudSystem_virtual-dock-simulator/ # 虚拟无人机设备模拟器
+```
+
+### 端口矩阵（必须熟记）
+
+| 服务             | 端口                | 协议                  | 启动方式                                       |
+| ---------------- | ------------------- | --------------------- | ---------------------------------------------- |
+| DISys (后端)     | 6789                | HTTP                  | Docker Compose / Maven                         |
+| Detection Server | 8000                | HTTP                  | `python main.py` (conda env: detection-server) |
+| Detection Server | 8001                | WebSocket             | 同上，双端口统一启动                           |
+| SRS (流媒体)     | 1935 / 8081 / 1985  | RTMP / HTTP-FLV / API | Docker Compose                                 |
+| MySQL            | 3306                | TCP                   | Docker Compose (root/root)                     |
+| Redis            | 6379                | TCP                   | Docker Compose                                 |
+| MinIO            | 9000 / 9001         | HTTP (API / Console)  | Docker Compose                                 |
+| EMQX (MQTT)      | 1883 / 8083 / 18083 | MQTT / WS / Dashboard | **宿主机安装**，非 Docker                      |
+| 前端 dev         | 3000                | HTTP                  | `npm run dev`                                  |
+
+### 跨服务数据流方向（单向依赖，无循环）
+
+```
+前端 ─HTTP──▶ DISys ◀──HTTP回调── Detection Server
+前端 ─HTTP──▶ Detection Server
+前端 ─WebSocket──▶ Detection Server (:8001)
+前端 ─STOMP WS──▶ DISys (:6789)
+前端 ─MQTT──▶ EMQX ◀──MQTT── DJI 设备
+Detection Server ─HTTP──▶ SRS (拉流/推流)
+Detection Server ─HTTP──▶ DISys (会话/告警/媒体注册)
+Detection Server ─S3──▶ MinIO (截图/视频/报告)
+```
+
+## 跨仓库联调关键点
+
+### 1. 检测链路改任何一环，三个仓库都要核对
+
+改检测会话/报告/告警链路时，必须同步检查：
+
+- `DroneCloudSystem_detection-server/backend_api_client.py` — HTTP 回调 DISys 的接口
+- `DISys/.../media/controller/` — 会话注册、报告、媒体回调
+- `DroneCloudSystem-web/src/views/DetectionDisplay.vue` — 前端检测面板
+- `DroneCloudSystem-web/src/api/detection.js` — 前端检测 API
+
+### 2. 认证 Token 约定
+
+- DISys 和前端之间：Header `x-auth-token`（不是 Bearer）
+- Detection Server → DISys：JWT Token，`backend_api_client.py` 的 `AuthTokenManager` 自动刷新（20h 间隔，24h 有效期）
+- 前端 Token 存储：`localStorage` 或 `sessionStorage`，前缀 `drone_cloud_`
+- 前端 API 调用必须先获取 `workspaceId`：`djiCloudAPI.getCurrentWorkspace()`
+
+### 3. API 路由前缀映射
+
+前端通过 Vite 代理（开发）或 nginx 反代（生产）访问后端：
+
+| 前端代理路径       | 目标            | 前缀               |
+| ------------------ | --------------- | ------------------ |
+| `/manage/*`        | DISys :6789     | `/manage/api/v1/`  |
+| `/wayline/*`       | DISys :6789     | `/wayline/api/v1/` |
+| `/media/*`         | DISys :6789     | `/media/api/v1/`   |
+| `/map/*`           | DISys :6789     | `/map/api/v1/`     |
+| `/control/*`       | DISys :6789     | `/control/api/v1/` |
+| `/detection-api/*` | Detection :8000 | `/api/v1/`         |
+| `/detection-ws/*`  | Detection :8001 | `/ws`              |
+
+### 4. 响应格式统一
+
+DISys 后端返回：`{ code, message, data }` — 新增接口必须保持同一结构。
+
+## 快速启动命令
+
+```bash
+# 后端 (DISys) — 推荐 Docker 一键
+cd DISys
+docker compose up -d          # 启动全部基础设施
+sh scripts/rebuild_and_restart_backend.sh  # 构建并重启后端
+
+# 前端
+cd DroneCloudSystem-web
+npm run dev                    # 开发 :3000
+
+# AI 检测服务 — 需要 conda 环境
+cd DroneCloudSystem_detection-server
+conda activate detection-server
+python main.py                 # HTTP :8000 + WS :8001
+```
+
+## 基础设施注意事项
+
+- **EMQX 在宿主机上运行**（不在 Docker 里），通过 `docker-compose.yml` 的 `extra_hosts: host-gateway` 桥接
+- Docker 自定义桥接网络 `192.168.6.0/24`（在 DISys/docker-compose.yml 定义）
+- 数据库迁移用 Flyway，baseline-version=3，迁移脚本在 `DISys/source/backend_service/sample/src/main/resources/db/migration/`
+- Detection Server 会话状态全内存，**重启即丢失**（已知技术债）
+
+## 已知技术债 & 陷阱
+
+| 问题                                                          | 影响                               | 位置                             |
+| ------------------------------------------------------------- | ---------------------------------- | -------------------------------- |
+| Detection Server `main.py` 1804行，God Module                 | 维护困难                           | detection-server/main.py         |
+| 前端 `store/` 和 `stores/` 两目录并存                         | 迁移遗留，新增 store 应放 `store/` | web/src/store/ vs stores/        |
+| 告警规则引擎前端 IndexedDB 实现                               | 无法跨设备同步，数据可能丢失       | web/src/services/alarmRuleEngine |
+| Detection Server 无测试文件                                   | 回归风险高                         | detection-server/                |
+| 前端 MissionPlanning.vue 6263行 / DetectionDisplay.vue 5278行 | 组件过大                           | web/src/views/                   |
+| DISys manage 模块 9037行 / 162文件                            | 最大模块                           | DISys source                     |
+
+## 重要经验教训（必须遵守）
+
+### Spring @Transactional + @Async 竞态条件
+
+**禁止**在同一 Bean 中同时使用 `@Transactional` 和 `@Async` 而不使用 `TransactionSynchronization.afterCommit()`。
+
+异步方法会在事务提交前执行，导致查询不到刚插入的记录。
+
+**正确做法**：
+
+```java
+TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+    @Override
+    public void afterCommit() {
+        self.generateReportAsync(taskId);
+    }
+});
+```
+
+### 预签名 URL 必须在有 HTTP 上下文时生成
+
+MinIO 预签名 URL 依赖请求上下文推导外部访问地址。在异步线程中生成会回退到内网地址（如 `http://minio:9000`）。
+
+**正确做法**：只保存 `objectKey`，预签名 URL 在 Controller 层实时生成。
+
+### 前端关键状态需要持久化
+
+页面刷新会丢失内存状态。重要映射关系（如 sessionId → taskId）需要持久化到 `sessionStorage`，并在页面加载时恢复。
+
+### WebSocket 不可靠时要有轮询兜底
+
+WebSocket 连接可能断开或丢消息。重要状态更新需要轮询作为兜底方案（每秒一次，最多2分钟）。
+
+### @JsonProperty 影响前端字段名
+
+如果后端 DTO 使用 `@JsonProperty("field_name")`，JSON 字段名会变成下划线命名。前端需要兼容驼峰和下划线两种格式。
+
+## 文档门禁（Conventional Commits + 文档同步）
+
+三个仓库均启用文档门禁。改动影响 API/部署/配置时，必须同步更新：
+
+- `README.md`
+- `docs/openapi.yaml`
+- `docs/开发交接指南.md`（如有）
+- `CHANGELOG.md`
+
+DISys 的 CI (`.github/workflows/check-docs.yml`) + 本地 pre-commit hook 会检查。
+
+## 详细文档索引
+
+每个子项目的 `CLAUDE.md` 是最权威的开发指南，包含完整模块清单、API 路由表、代码约定和常见命令。
+
+- `DISys/CLAUDE.md` — 后端模块架构、Maven 结构、Docker 部署、Flyway 迁移
+- `DISys/docs/architecture.md` — 后端架构详细文档（P1/P2/P3）
+- `DroneCloudSystem-web/CLAUDE.md` — 前端架构、路由、状态管理、实时通信
+- `DroneCloudSystem-web/docs/architecture-analysis.md` — 前端架构详细文档
+- `DroneCloudSystem_detection-server/CLAUDE.md` — 检测服务架构、API 端点、ML Pipeline
+- `DroneCloudSystem_detection-server/docs/architecture.md` — 检测服务架构详细文档
+

@@ -1,0 +1,64 @@
+# ==========================================================
+# 平台级文档仓库 .gitignore
+# 本仓库只管理跨仓库共享文档，子项目源码全部忽略
+# ==========================================================
+
+# ===== 子项目源码目录（各自独立仓库）=====
+/DISys/
+/DroneCloudSystem-web/
+/DroneCloudSystem_detection-server/
+/DroneCloudSystem_virtual-dock-simulator/
+/design-prototypes/
+/dji-cloud-api-docs/
+
+# ===== AI/Agent 工具产物（本地缓存，不应入库）=====
+.claude/
+.serena/
+.learnings/
+.omo/
+.playwright-mcp/
+.tmp_helmet_audit/
+
+# ===== 日志与运行时产物 =====
+/logs/
+*.log
+
+# ===== 临时文件 =====
+*.tmp
+*.bak
+*.swp
+*~
+
+# ===== 媒体文件（设计稿/截图不入库，设计原型放 design-prototypes/）=====
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+
+# ===== IDE / 编辑器配置 =====
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.project
+.classpath
+.settings/
+
+# ===== 操作系统产物 =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+
+# ===== 临时调试脚本与数据（根目录散落的临时产物）=====
+/patch_router.py
+/test-open-design-integration.sh
+/pip-map-network.txt
+/gty3000.json
