@@ -31,6 +31,7 @@ docs/
   business/
     业务总览.md
     业务词汇表.md
+    多租户系统业务文档.md
     实时直播与检测流程.md
     告警生成与处理流程.md
     跨服务链路.md
@@ -53,4 +54,3 @@ README.md
 - `DISys`：Spring Boot 后端，负责业务主数据、权限、设备管理、媒体与告警持久化
 - `DroneCloudSystem-web`：Vue 前端，负责任务编排、飞控展示、检测结果展示与用户交互
 - `DroneCloudSystem_detection-server`：FastAPI 检测服务，负责实时检测、离线检测、截图、报告与告警触发
-
