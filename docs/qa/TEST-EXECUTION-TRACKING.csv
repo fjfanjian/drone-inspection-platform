@@ -1,0 +1,9 @@
+Test Case ID,Priority,Type,Owner,Authoritative Spec,Status,Last Run,Command,Evidence,Defect ID,Notes
+P0-AUTH-001,P0,E2E,DISys/Web,docs/qa/RELEASE-GATE.md,NOT_RUN,,scripts/quality-gate.sh release,,,
+P0-TENANT-001,P0,Integration,DISys/Detection,docs/qa/RELEASE-GATE.md,NOT_RUN,,scripts/quality-gate.sh release,,,
+P0-DEVICE-001,P0,Integration,DISys/Web/Simulator,docs/qa/RELEASE-GATE.md,NOT_RUN,,scripts/quality-gate.sh release,,,
+P0-WAYLINE-001,P0,E2E,DISys/Web,docs/qa/RELEASE-GATE.md,NOT_RUN,,scripts/quality-gate.sh release,,,
+P0-DETECTION-001,P0,E2E,All,docs/qa/RELEASE-GATE.md,NOT_RUN,,scripts/quality-gate.sh release,,,
+P0-MEDIA-001,P0,Integration,DISys/Detection,docs/qa/RELEASE-GATE.md,NOT_RUN,,scripts/quality-gate.sh release,,,
+P0-ALARM-001,P0,Integration,DISys/Web/Detection,docs/qa/RELEASE-GATE.md,NOT_RUN,,scripts/quality-gate.sh release,,,
+P0-BUILD-001,P0,Release,Web/DISys,docs/qa/RELEASE-GATE.md,NOT_RUN,,scripts/quality-gate.sh release,,,

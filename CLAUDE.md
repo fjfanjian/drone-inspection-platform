@@ -8,6 +8,15 @@
 
 完成工作后**必须**进行回归测试，确保更改没有影响原业务功能。
 
+## 自动化测试门禁（必须执行）
+
+- 任何代码、配置、脚本、API 契约或部署相关改动完成后，必须运行与影响范围匹配的自动化测试门禁，并在最终回复中写明执行命令与结果；失败不得忽略或绕过。
+- 根目录统一入口：`powershell -ExecutionPolicy Bypass -File scripts/quality-gate.ps1 <target>` 或 `bash scripts/quality-gate.sh <target>`；`<target>` 可选 `backend`、`frontend`、`detection`、`simulator`、`integration`、`pr`、`release`。
+- 单仓改动至少运行对应门禁：后端 `backend`，前端 `frontend`，检测服务 `detection`，虚拟机场 `simulator`。跨仓、检测链路、认证、媒体/报告/告警、航线任务、实时状态相关改动必须额外运行 `integration`；合并前建议运行 `pr`。
+- 上线、发布、生产部署或 Release 前必须运行 `release` 门禁，并确认生成 `logs/quality-gate/release-test-report.md` 与 `logs/quality-gate/release-test-report.json`。
+- P0/P1 业务链路相关测试失败、跳过或未执行时禁止上线；确实无法运行时，必须在回复和发布报告中说明原因、影响范围、补救命令与风险。
+- 前端页面、组件、交互、样式改动除自动化门禁外，仍必须进行浏览器或 webapp-testing 可视化检查。
+
 ### 前端设计原型约束
 
 - 进行任何前端页面、组件、交互或样式更改前，必须先查看并遵循已有设计原型、截图、设计稿或 `DroneCloudSystem-web/DESIGN.md` 中的设计系统规范。
